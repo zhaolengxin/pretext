@@ -175,6 +175,7 @@ Complete correction table (all integer sizes):
 
 Filed as browser bugs:
 - Chrome: [issues.chromium.org/489494015](https://issues.chromium.org/issues/489494015) — emoji measureText inflation
+- Chrome: [issues.chromium.org/489579956](https://issues.chromium.org/issues/489579956) — system-ui canvas/DOM optical variant mismatch
 - Firefox: [bugzilla.mozilla.org/2020894](https://bugzilla.mozilla.org/show_bug.cgi?id=2020894) — emoji measureText inflation
 - Firefox: [bugzilla.mozilla.org/2020917](https://bugzilla.mozilla.org/show_bug.cgi?id=2020917) — system-ui canvas/DOM font resolution mismatch
 
