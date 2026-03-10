@@ -101,6 +101,20 @@ const FONT_MATRIX: Record<string, FontVariant[]> = {
       lineHeight: 32,
     },
   ],
+  'th-nithan-vetal-story-7': [
+    {
+      id: 'default',
+      label: 'Thonburi',
+      font: '20px "Thonburi", "Noto Sans Thai", sans-serif',
+      lineHeight: 32,
+    },
+    {
+      id: 'ayuthaya',
+      label: 'Ayuthaya',
+      font: '20px "Ayuthaya", "Thonburi", serif',
+      lineHeight: 32,
+    },
+  ],
   'my-cunning-heron-teacher': [
     {
       id: 'default',

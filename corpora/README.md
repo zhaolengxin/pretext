@@ -25,6 +25,12 @@ Current bundle:
   - URL: <https://th.wikisource.org/wiki/%E0%B8%99%E0%B8%B4%E0%B8%97%E0%B8%B2%E0%B8%99%E0%B9%80%E0%B8%A7%E0%B8%95%E0%B8%B2%E0%B8%A5/%E0%B9%80%E0%B8%A3%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%87%E0%B8%97%E0%B8%B5%E0%B9%88_1>
   - Acquisition: Wikisource `parse` API, trimmed to the story body with header navigation and trailing footnote removed
 
+- `th-nithan-vetal-story-7.txt`
+  - Language: Thai
+  - Source: `นิทานเวตาล เรื่องที่ ๗`
+  - URL: <https://th.wikisource.org/wiki/%E0%B8%99%E0%B8%B4%E0%B8%97%E0%B8%B2%E0%B8%99%E0%B9%80%E0%B8%A7%E0%B8%95%E0%B8%B2%E0%B8%A5_%E0%B9%80%E0%B8%A3%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%87%E0%B8%97%E0%B8%B5%E0%B9%88_%E0%B9%97>
+  - Acquisition: Wikisource `parse` API, trimmed to the story body after removing navigation and header scaffolding
+
 - `my-cunning-heron-teacher.txt`
   - Language: Myanmar
   - Source: `စဉ်းလဲသော ဗျိုင်း (ဆရာ)`

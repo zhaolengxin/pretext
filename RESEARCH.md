@@ -767,6 +767,16 @@ Treating ASCII `"` as contextual quote glue during preprocessing was enough to c
 field from `43/61 exact` to `59/61 exact`, without moving the browser accuracy corpus in Safari or Firefox.
 The two remaining coarse Thai misses are both the familiar tiny positive edge-fit class (`+32px`).
 
+Broadening within Thai with a second clean prose corpus (`นิทานเวตาล เรื่องที่ ๗`) was reassuring:
+- Chrome anchor widths at `300`, `600`, and `800` were exact
+- Safari anchor widths at `300`, `600`, and `800` were exact
+- a Chrome sampled sweep (`--samples=9`) was exact
+
+Interpretation:
+- the first Thai success was not just one lucky text
+- the current Thai preprocessing / diagnostics model appears to generalize across at least two different
+  prose slices from the same work without new script-specific heuristics
+
 ## Khmer corpus note
 
 To broaden the Southeast Asian stress class without immediately jumping to Lao/Khmer-specific engine work,

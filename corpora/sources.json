@@ -54,6 +54,24 @@
     "notes": "Thai prose stress corpus from Wikisource, trimmed to the story body with header navigation and trailing footnote removed."
   },
   {
+    "id": "th-nithan-vetal-story-7",
+    "language": "th",
+    "direction": "ltr",
+    "title": "นิทานเวตาล เรื่องที่ ๗",
+    "source_url": "https://th.wikisource.org/wiki/%E0%B8%99%E0%B8%B4%E0%B8%97%E0%B8%B2%E0%B8%99%E0%B9%80%E0%B8%A7%E0%B8%95%E0%B8%B2%E0%B8%A5_%E0%B9%80%E0%B8%A3%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%87%E0%B8%97%E0%B8%B5%E0%B9%88_%E0%B9%97",
+    "output": "corpora/th-nithan-vetal-story-7.txt",
+    "font_family": "\"Thonburi\", \"Noto Sans Thai\", sans-serif",
+    "font_size_px": 20,
+    "line_height_px": 32,
+    "default_width": 600,
+    "min_width": 300,
+    "max_width": 900,
+    "characters": 30209,
+    "lines": 239,
+    "acquired_via": "parse",
+    "notes": "Second Thai prose stress corpus from Wikisource, trimmed to the story body after removing navigation and header scaffolding."
+  },
+  {
     "id": "my-cunning-heron-teacher",
     "language": "my",
     "direction": "ltr",
