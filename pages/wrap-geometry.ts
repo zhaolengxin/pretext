@@ -117,7 +117,22 @@ export function getRectIntervalsForBand(
   return intervals
 }
 
-export function subtractIntervals(base: Interval, blocked: Interval[]): Interval[] {
+// Given one allowed horizontal interval and a set of blocked intervals,
+// carve out the remaining usable text slots for one row band.
+//
+// Example:
+// - base:    80..420
+// - blocked: 200..310
+// - result:  80..200, 310..420
+//
+// On the logo-columns page, the base interval is one full column row,
+// the blocked intervals come from the title/logo shapes at that band,
+// and the returned intervals are the candidate text slots for that row.
+//
+// This helper is intentionally page-oriented, not pure geometry:
+// it also discards absurdly narrow leftover slivers that we would never
+// want to hand to text layout.
+export function carveTextLineSlots(base: Interval, blocked: Interval[]): Interval[] {
   let slots: Interval[] = [base]
 
   for (const interval of blocked) {

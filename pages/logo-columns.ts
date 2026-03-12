@@ -1,13 +1,36 @@
+/*
+This page's made to show off our font APIs:
+- Title lines are measured and placed by our own layout engine, not inferred from DOM flow.
+- Title font size is fit using repeated API calls so whole words survive.
+- The title itself now participates in obstacle routing against the OpenAI logo.
+- The author line is placed from the measured title result, and it also respects the OpenAI geometry.
+- The body is one continuous text stream, not two unrelated excerpts.
+- The left column consumes text first, and the right column resumes from the same cursor.
+- The right column routes around:
+  - the actual title geometry
+  - the Anthropic/Claude logo hull
+  - the OpenAI logo when it intrudes
+- The left column routes around the OpenAI logo hull.
+- The logo contours are derived once from rasterized SVG alpha, cached, then transformed per render.
+- Hover/click hit testing uses transformed logo hulls too.
+- Clicking a logo rotates it, and the text reflows live around the rotated geometry.
+- Obstacle exclusion is based on the full line band, not a single y sample.
+- The page is a fixed-height viewport-bound spread:
+  - vertical resize changes reflow
+  - overflow after the second column truncates
+- The first visible render now waits for both fonts and hull preload, so it uses the real geometry from the start.
+- There is no DOM text measurement loop feeding layout.
+*/
 import { layoutNextLine, layoutWithLines, prepareWithSegments, type LayoutCursor, type LayoutLine, type PreparedTextWithSegments } from '../src/layout.ts'
 import { BODY_COPY } from './logo-columns-text.ts'
 import openaiLogoUrl from './assets/openai-symbol.svg'
 import claudeLogoUrl from './assets/claude-symbol.svg'
 import {
+  carveTextLineSlots,
   getPolygonIntervalForBand,
   getRectIntervalsForBand,
   getWrapHull,
   isPointInPolygon,
-  subtractIntervals,
   transformWrapPoints,
   type Interval,
   type Point,
@@ -41,6 +64,7 @@ type LogoAnimationState = {
 type PositionedLine = {
   x: number
   y: number
+  width: number
   text: string
 }
 
@@ -60,16 +84,15 @@ type BandObstacle =
 
 type PageLayout = {
   gutter: number
-  headlineTop: number
-  headlineWidth: number
+  pageWidth: number
+  pageHeight: number
+  centerGap: number
+  columnWidth: number
+  headlineRegion: Rect
   headlineFont: string
   headlineLineHeight: number
-  headlineLines: LayoutLine[]
-  headlineRects: Rect[]
-  creditTop: number
-  creditRegion: Rect
-  leftRegion: Rect
-  rightRegion: Rect
+  creditGap: number
+  copyGap: number
   openaiRect: Rect
   claudeRect: Rect
 }
@@ -218,7 +241,7 @@ function layoutColumn(
     const blocked: Interval[] = []
     for (const obstacle of obstacles) blocked.push(...getObstacleIntervals(obstacle, bandTop, bandBottom))
 
-    const slots = subtractIntervals(
+    const slots = carveTextLineSlots(
       { left: region.x, right: region.x + region.width },
       blocked,
     )
@@ -242,6 +265,7 @@ function layoutColumn(
     lines.push({
       x: Math.round(slot.left),
       y: Math.round(lineTop),
+      width: line.width,
       text: line.text,
     })
 
@@ -264,7 +288,7 @@ function syncPool<T extends HTMLElement>(pool: T[], length: number, create: () =
   }
 }
 
-function projectHeadlineLines(lines: LayoutLine[], font: string, lineHeight: number): void {
+function projectHeadlineLines(lines: PositionedLine[], font: string, lineHeight: number): void {
   syncPool(domCache.headlineLines, lines.length, () => {
     const element = document.createElement('div')
     element.className = 'headline-line'
@@ -274,8 +298,8 @@ function projectHeadlineLines(lines: LayoutLine[], font: string, lineHeight: num
   for (const [index, line] of lines.entries()) {
     const element = domCache.headlineLines[index]!
     element.textContent = line.text
-    element.style.left = '0px'
-    element.style.top = `${index * lineHeight}px`
+    element.style.left = `${line.x}px`
+    element.style.top = `${line.y}px`
     element.style.font = font
     element.style.lineHeight = `${lineHeight}px`
   }
@@ -310,17 +334,15 @@ function projectStaticLayout(layout: PageLayout, pageHeight: number): void {
   domCache.claudeLogo.style.height = `${layout.claudeRect.height}px`
   domCache.claudeLogo.style.transform = `rotate(${logoAnimations.claude.angle}rad)`
 
-  domCache.headline.style.left = `${layout.gutter}px`
-  domCache.headline.style.top = `${layout.headlineTop}px`
-  domCache.headline.style.width = `${layout.headlineWidth}px`
-  domCache.headline.style.height = `${layout.headlineLines.length * layout.headlineLineHeight}px`
+  domCache.headline.style.left = '0px'
+  domCache.headline.style.top = '0px'
+  domCache.headline.style.width = `${layout.pageWidth}px`
+  domCache.headline.style.height = `${layout.pageHeight}px`
   domCache.headline.style.font = layout.headlineFont
   domCache.headline.style.lineHeight = `${layout.headlineLineHeight}px`
   domCache.headline.style.letterSpacing = '0px'
-  projectHeadlineLines(layout.headlineLines, layout.headlineFont, layout.headlineLineHeight)
-
   domCache.credit.style.left = `${layout.gutter + 4}px`
-  domCache.credit.style.top = `${layout.creditTop}px`
+  domCache.credit.style.top = '0px'
   domCache.credit.style.width = 'auto'
   domCache.credit.style.font = CREDIT_FONT
   domCache.credit.style.lineHeight = `${CREDIT_LINE_HEIGHT}px`
@@ -457,50 +479,21 @@ function buildLayout(pageWidth: number, pageHeight: number, lineHeight: number):
   const headlineFontSize = fitHeadlineFontSize(headlineWidth, pageWidth)
   const headlineLineHeight = Math.round(headlineFontSize * 0.92)
   const headlineFont = `700 ${headlineFontSize}px ${HEADLINE_FONT_FAMILY}`
-  const headlineResult = layoutWithLines(
-    getPrepared(HEADLINE_TEXT, headlineFont),
-    headlineWidth,
-    headlineLineHeight,
-  )
-  const headlineLines = headlineResult.lines
-  const headlineRects = headlineLines.map((line, index) => ({
-    x: gutter,
-    y: headlineTop + index * headlineLineHeight,
-    width: Math.ceil(line.width),
-    height: headlineLineHeight,
-  }))
-
   const creditGap = Math.round(Math.max(14, lineHeight * 0.6))
-  const creditTop = headlineTop + headlineResult.height + creditGap
-  const copyTop = creditTop + CREDIT_LINE_HEIGHT + Math.round(Math.max(20, lineHeight * 0.9))
+  const copyGap = Math.round(Math.max(20, lineHeight * 0.9))
   const openaiShrinkT = Math.max(0, Math.min(1, (960 - pageWidth) / 260))
   const OPENAI_SIZE = 400 - openaiShrinkT * 56
   const openaiSize = Math.round(Math.min(OPENAI_SIZE, pageHeight * 0.43))
   const claudeSize = Math.round(Math.max(276, Math.min(500, pageWidth * 0.355, pageHeight * 0.45)))
-
-  const creditRegion: Rect = {
-    x: gutter + 4,
-    y: creditTop,
-    width: headlineWidth,
-    height: CREDIT_LINE_HEIGHT,
-  }
-
-  const leftRegion: Rect = {
+  const headlineRegion: Rect = {
     x: gutter,
-    y: copyTop,
-    width: columnWidth,
-    height: pageHeight - copyTop - gutter,
-  }
-
-  const rightRegion: Rect = {
-    x: gutter + columnWidth + centerGap,
     y: headlineTop,
-    width: columnWidth,
+    width: headlineWidth,
     height: pageHeight - headlineTop - gutter,
   }
 
   const openaiRect: Rect = {
-    x: leftRegion.x - Math.round(openaiSize * 0.3),
+    x: gutter - Math.round(openaiSize * 0.3),
     y: pageHeight - gutter - openaiSize + Math.round(openaiSize * 0.2),
     width: openaiSize,
     height: openaiSize,
@@ -515,16 +508,15 @@ function buildLayout(pageWidth: number, pageHeight: number, lineHeight: number):
 
   return {
     gutter,
-    headlineTop,
-    headlineWidth,
+    pageWidth,
+    pageHeight,
+    centerGap,
+    columnWidth,
+    headlineRegion,
     headlineFont,
     headlineLineHeight,
-    headlineLines,
-    headlineRects,
-    creditTop,
-    creditRegion,
-    leftRegion,
-    rightRegion,
+    creditGap,
+    copyGap,
     openaiRect,
     claudeRect,
   }
@@ -535,16 +527,57 @@ function evaluateLayout(
   lineHeight: number,
   preparedBody: PreparedTextWithSegments,
 ): {
+  headlineLines: PositionedLine[]
   creditLeft: number
+  creditTop: number
   leftLines: PositionedLine[]
   rightLines: PositionedLine[]
   hits: LogoHits
 } {
   const { openaiObstacle, claudeObstacle, hits } = getLogoProjection(layout, lineHeight)
 
+  const headlinePrepared = getPrepared(HEADLINE_TEXT, layout.headlineFont)
+  const headlineResult = layoutColumn(
+    headlinePrepared,
+    { segmentIndex: 0, graphemeIndex: 0 },
+    layout.headlineRegion,
+    layout.headlineLineHeight,
+    [openaiObstacle],
+    'left',
+  )
+  const headlineLines = headlineResult.lines
+  const headlineRects = headlineLines.map(line => ({
+    x: line.x,
+    y: line.y,
+    width: Math.ceil(line.width),
+    height: layout.headlineLineHeight,
+  }))
+  const headlineBottom = headlineLines.length === 0
+    ? layout.headlineRegion.y
+    : Math.max(...headlineLines.map(line => line.y + layout.headlineLineHeight))
+  const creditTop = headlineBottom + layout.creditGap
+  const creditRegion: Rect = {
+    x: layout.gutter + 4,
+    y: creditTop,
+    width: layout.headlineRegion.width,
+    height: CREDIT_LINE_HEIGHT,
+  }
+  const copyTop = creditTop + CREDIT_LINE_HEIGHT + layout.copyGap
+  const leftRegion: Rect = {
+    x: layout.gutter,
+    y: copyTop,
+    width: layout.columnWidth,
+    height: layout.pageHeight - copyTop - layout.gutter,
+  }
+  const rightRegion: Rect = {
+    x: layout.gutter + layout.columnWidth + layout.centerGap,
+    y: layout.headlineRegion.y,
+    width: layout.columnWidth,
+    height: layout.pageHeight - layout.headlineRegion.y - layout.gutter,
+  }
   const titleObstacle: BandObstacle = {
     kind: 'rects',
-    rects: layout.headlineRects,
+    rects: headlineRects,
     horizontalPadding: Math.round(lineHeight * 0.95),
     verticalPadding: Math.round(lineHeight * 0.3),
   }
@@ -552,17 +585,17 @@ function evaluateLayout(
   const creditWidth = Math.ceil(getPreparedSingleLineWidth(CREDIT_TEXT, CREDIT_FONT, CREDIT_LINE_HEIGHT))
   const creditBlocked = getObstacleIntervals(
     openaiObstacle,
-    layout.creditRegion.y,
-    layout.creditRegion.y + layout.creditRegion.height,
+    creditRegion.y,
+    creditRegion.y + creditRegion.height,
   )
-  const creditSlots = subtractIntervals(
+  const creditSlots = carveTextLineSlots(
     {
-      left: layout.creditRegion.x,
-      right: layout.creditRegion.x + layout.creditRegion.width,
+      left: creditRegion.x,
+      right: creditRegion.x + creditRegion.width,
     },
     creditBlocked,
   )
-  let creditLeft = layout.creditRegion.x
+  let creditLeft = creditRegion.x
   for (const slot of creditSlots) {
     if (slot.right - slot.left >= creditWidth) {
       creditLeft = Math.round(slot.left)
@@ -573,7 +606,7 @@ function evaluateLayout(
   const leftResult = layoutColumn(
     preparedBody,
     { segmentIndex: 0, graphemeIndex: 0 },
-    layout.leftRegion,
+    leftRegion,
     lineHeight,
     [openaiObstacle],
     'left',
@@ -582,14 +615,16 @@ function evaluateLayout(
   const rightResult = layoutColumn(
     preparedBody,
     leftResult.cursor,
-    layout.rightRegion,
+    rightRegion,
     lineHeight,
     [titleObstacle, claudeObstacle, openaiObstacle],
     'right',
   )
 
   return {
+    headlineLines,
     creditLeft,
+    creditTop,
     leftLines: leftResult.lines,
     rightLines: rightResult.lines,
     hits,
@@ -634,7 +669,7 @@ function render(now: number): boolean {
   const animating = updateSpinState(now)
   const preparedBody = getPrepared(BODY_COPY, font)
   const layout = buildLayout(pageWidth, pageHeight, lineHeight)
-  const { creditLeft, leftLines, rightLines, hits } = evaluateLayout(layout, lineHeight, preparedBody)
+  const { headlineLines, creditLeft, creditTop, leftLines, rightLines, hits } = evaluateLayout(layout, lineHeight, preparedBody)
 
   // === commit state
   events.mousemove = null
@@ -644,7 +679,9 @@ function render(now: number): boolean {
 
   // === DOM writes
   projectStaticLayout(layout, pageHeight)
+  projectHeadlineLines(headlineLines, layout.headlineFont, layout.headlineLineHeight)
   domCache.credit.style.left = `${creditLeft}px`
+  domCache.credit.style.top = `${creditTop}px`
   syncPool(domCache.bodyLines, leftLines.length + rightLines.length, () => {
     const element = document.createElement('div')
     element.className = 'line'
