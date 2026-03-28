@@ -110,11 +110,14 @@ type DragState = {
   startOrbY: number
 }
 
+type InteractionMode = 'idle' | 'text-select'
+
 type AppState = {
   orbs: Orb[]
   pointer: PointerState
   drag: DragState | null
-  touchTextActive: boolean
+  interactionMode: InteractionMode
+  selectionActive: boolean
   events: {
     pointerDown: PointerSample | null
     pointerMove: PointerSample | null
@@ -306,7 +309,8 @@ const st: AppState = {
   })),
   pointer: { x: -9999, y: -9999 },
   drag: null,
-  touchTextActive: false,
+  interactionMode: 'idle',
+  selectionActive: false,
   events: {
     pointerDown: null,
     pointerMove: null,
@@ -485,6 +489,34 @@ function hasActiveTextSelection(): boolean {
   return selection !== null && !selection.isCollapsed && selection.rangeCount > 0
 }
 
+function clearQueuedPointerEvents(): void {
+  st.events.pointerDown = null
+  st.events.pointerMove = null
+  st.events.pointerUp = null
+}
+
+function enterTextSelectionMode(): void {
+  st.interactionMode = 'text-select'
+  clearQueuedPointerEvents()
+  st.lastFrameTime = null
+  domCache.stage.style.userSelect = ''
+  domCache.stage.style.webkitUserSelect = ''
+  document.body.style.cursor = ''
+}
+
+function syncSelectionState(): void {
+  st.selectionActive = hasActiveTextSelection()
+  if (st.selectionActive) {
+    enterTextSelectionMode()
+  } else if (st.interactionMode === 'text-select' && st.drag === null) {
+    st.interactionMode = 'idle'
+  }
+}
+
+function isTextSelectionInteractionActive(): boolean {
+  return st.interactionMode === 'text-select' || st.selectionActive
+}
+
 let scheduledRaf: number | null = null
 function scheduleRender(): void {
   if (scheduledRaf !== null) return
@@ -496,7 +528,7 @@ function scheduleRender(): void {
 
 stage.addEventListener('pointerdown', event => {
   if (event.pointerType === 'touch' && isSelectableTextTarget(event.target)) {
-    st.touchTextActive = true
+    enterTextSelectionMode()
     return
   }
 
@@ -505,55 +537,49 @@ stage.addEventListener('pointerdown', event => {
   const hitOrbIndex = hitTestOrbs(st.orbs, event.clientX, event.clientY, activeOrbCount, radiusScale)
   if (hitOrbIndex !== -1) {
     event.preventDefault()
-  } else if (event.pointerType === 'touch') {
-    st.touchTextActive = true
+  } else if (event.pointerType === 'touch' && st.selectionActive) {
+    enterTextSelectionMode()
+    return
   }
   st.events.pointerDown = pointerSampleFromEvent(event)
   scheduleRender()
 })
 
 stage.addEventListener('touchmove', event => {
-  if (st.touchTextActive || hasActiveTextSelection()) return
+  if (isTextSelectionInteractionActive()) return
   event.preventDefault()
 }, { passive: false })
 
 window.addEventListener('pointermove', event => {
-  if (event.pointerType === 'touch' && (st.touchTextActive || hasActiveTextSelection()) && st.drag === null) return
+  if (event.pointerType === 'touch' && isTextSelectionInteractionActive() && st.drag === null) return
   st.events.pointerMove = pointerSampleFromEvent(event)
   scheduleRender()
 })
 
 window.addEventListener('pointerup', event => {
-  if (event.pointerType === 'touch' && (st.touchTextActive || hasActiveTextSelection()) && st.drag === null) {
-    st.touchTextActive = hasActiveTextSelection()
+  if (event.pointerType === 'touch' && isTextSelectionInteractionActive() && st.drag === null) {
+    syncSelectionState()
     return
   }
-  if (event.pointerType === 'touch') st.touchTextActive = false
+  if (event.pointerType === 'touch') syncSelectionState()
   st.events.pointerUp = pointerSampleFromEvent(event)
   scheduleRender()
 })
 
 window.addEventListener('pointercancel', event => {
-  if (event.pointerType === 'touch') st.touchTextActive = false
+  if (event.pointerType === 'touch') syncSelectionState()
   st.events.pointerUp = pointerSampleFromEvent(event)
   scheduleRender()
 })
 
 window.addEventListener('resize', () => scheduleRender())
 document.addEventListener('selectionchange', () => {
-  st.touchTextActive = hasActiveTextSelection()
+  syncSelectionState()
   scheduleRender()
 })
 
 function render(now: number): boolean {
-  if ((st.touchTextActive || hasActiveTextSelection()) && st.drag === null) {
-    st.events.pointerDown = null
-    st.events.pointerMove = null
-    st.events.pointerUp = null
-    st.lastFrameTime = null
-    domCache.stage.style.userSelect = ''
-    domCache.stage.style.webkitUserSelect = ''
-    document.body.style.cursor = ''
+  if (isTextSelectionInteractionActive() && st.drag === null) {
     return false
   }
 
